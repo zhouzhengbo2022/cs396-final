@@ -3,10 +3,11 @@ products <- read.csv("products.csv")
 
 # Question 1
 #filter products to only books that have a salesrank of <= 150000 and salesrank !=-1
-new_product <- subset(products, products$group == 'Book' & products$salesrank <= 150 & products$salesrank != -1)
+new_product <- subset(products, products$id <= 50)
+head(new_product)
 book_id <- unique(new_product$id)
 new_copurchase <- subset(copurchase, copurchase$Source %in% book_id & copurchase$Target %in% book_id)
-
+head(new_copurchase)
 
 library(statnet)
 
@@ -14,13 +15,30 @@ library(statnet)
 # View the first rows of the edgelist to make sure it imported correctly:
 head(new_copurchase)
 # Convert the edgelist to a network object in statnet format:
-advice <- as.network.matrix(new_copurchase, matrix.type = "edgelist") 
+advice_co <- graph.data.frame(new_copurchase)
+
+set.vertex.attribute(advice_co, "rating",value = new_product$rating)
+set.vertex.attribute(advice_co, "salesrank",value = new_product$salesrank)
+set.vertex.attribute(advice_co, "review_cnt",value = new_product$review_cnt)
+set.vertex.attribute(advice_co, "downloads",value = new_product$downloads)
+#advice_info=as_data_frame(advice_co, "both")
+get.vertex.attribute(advice_co,"rating")
+get.vertex.attribute(advice_co,"salesrank")
+
+advice <- as.network.matrix(advice_co, matrix.type = "edgelist") 
 advice
 
-set.vertex.attribute(advice, "rating",new_product$rating)
-set.vertex.attribute(advice, "salesrank",new_product$salesrank)
-set.vertex.attribute(advice, "review_cnt",new_product$review_cnt)
-set.vertex.attribute(advice, "downloads",new_product$downloads)
+
+
+advice <- as.network.matrix(new_copurchase, matrix.type = "edgelist") 
+advice
+set.vertex.attribute(advice, "rating",value = new_product$rating)
+set.vertex.attribute(advice, "salesrank",value = new_product$salesrank)
+set.vertex.attribute(advice, "review_cnt",value = new_product$review_cnt)
+set.vertex.attribute(advice, "downloads",value = new_product$downloads)
+set.vertex.attribute(advice, "group",value = new_product$group)
+get.vertex.attribute(advice, "downloads")
+
 
 
 
@@ -43,35 +61,42 @@ summary(advice ~ gwidegree(log(2),fixed=T)) # One parameters summarizing indegre
 summary(advice ~ desp(1:5))                 # Pairs of nodes with one shared partner, two shared partners, etc.
 summary(advice ~ dgwesp(log(2),fixed = T))
 
-
-model1 <- ergm(advice ~ edges                 # This is  a tendency towards a greater number of advice ties existing. Based on a statistic counting the number of ties.
+advice
+model0 <- ergm(advice ~ mutual )
+summary(model0)
+model1 <- ergm(advice ~ edges + mutual)
+summary(model1)
+model2 <- ergm(advice ~ edges + gwidegree(log(2), fixed = T) + gwodegree(2, fixed = T) + nodecov('review_cnt') + nodecov('downloads') +nodecov('rating') + nodecov('salesrank'))
+summary(model2)
+model2 <- ergm(advice ~ edges                 # This is  a tendency towards a greater number of advice ties existing. Based on a statistic counting the number of ties.
                # Structural patterns
-               + mutual                      # This is a tendency towards reciprocity for the advice ties. Based on a statistic counting the number of reciprocated ties.
+               + mutual + idegree(1)                     # This is a tendency towards reciprocity for the advice ties. Based on a statistic counting the number of reciprocated ties.
                   # This is the effect of every 100 messages sent from i->j on likelihood of an advice tie. Based on a weighted sum of advice ties x 100s of messages sent
-               
                # Model constraints
-               , constraints =~ bd(maxout=5) # This constraint enforces the maximum outdegree is 5
+               #, constraints =~ bd(maxout=5) # This constraint enforces the maximum outdegree is 5
 ) 
 summary(model1) 
 summary(advice ~ nodecov("downloads"))
 summary(advice ~ nodecov("salesrank"))
 summary(advice ~ nodecov("review_cnt"))
 summary(advice ~ nodecov("rating"))
-
+advice
 model2 <- ergm(advice ~ 
-               #edges                 # This is  a tendency towards a greater number of advice ties existing. Based on a statistic counting the number of ties.
+               mutual                 # This is  a tendency towards a greater number of advice ties existing. Based on a statistic counting the number of ties.
                # Structural patterns
-               + mutual                      # This is a tendency towards reciprocity for the advice ties. Based on a statistic counting the number of reciprocated ties.
+                                     # This is a tendency towards reciprocity for the advice ties. Based on a statistic counting the number of reciprocated ties.
                # This is the effect of every 100 messages sent from i->j on likelihood of an advice tie. Based on a weighted sum of advice ties x 100s of messages sent
-               + gwidegree(log(2), fixed = T)                 # Inverted preferential attachment (indegree)
-               + gwodegree(2, fixed = T, cutoff = 5)              # Inverted preferential attachment (outdegree)
-               + dgwesp(log(2), type = "OTP", fixed = T, cutoff =5)
-               + nodecov('rating')
-               + nodecov('salesrank')
-               + nodecov('review_cnt')
-               + nodecov('downloads')
+               #+ gwidegree()                 # Inverted preferential attachment (indegree)
+               #+ gwodegree()              # Inverted preferential attachment (outdegree)
+               + dgwesp(log(2), type = "OTP", fixed = T, cutoff = 5)
+               + nodeocov('rating')
+               + nodeocov('rating')
+               + nodematch('group')
+               #+ nodematch('salesrank')
+               #+ nodematch('review_cnt')
+               #+ nodematch('downloads')
                # Model constraints
-               , constraints =~ bd(maxout=5)
+               #, constraints =~ bd(maxout=5)
                , control = control.ergm(MCMC.effectiveSize = 50)# This constraint enforces the maximum outdegree is 5
 ) 
 summary(model2) 
